@@ -1186,7 +1186,7 @@ export default function App() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
             <div className="space-y-2">
-              <h4 className="font-semibold text-white flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400">
+              <h4 className="font-semibold flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400">
                 1. The Constant Product Invariant
               </h4>
               <p className="text-slate-400 leading-relaxed text-xs">
