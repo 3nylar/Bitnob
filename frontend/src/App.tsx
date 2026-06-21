@@ -75,7 +75,7 @@ interface PositionResponse {
 
 type WorkstationTab = "swap" | "liquidity" | "position";
 
-const BACKEND_URL = "http://127.0.0.1:8000";
+const BACKEND_URL = import.meta.env.VITE_API_BASE_URL;
 const SWAP_FEE_BPS = 30;
 const MAX_PRICE_HISTORY = 200;
 const USER_ID_KEY = "amm_sim_user_id";
@@ -410,7 +410,11 @@ export default function App() {
     }
   };
 
-  const tabs: { id: WorkstationTab; label: string; icon: typeof ArrowDownUp }[] = [
+  const tabs: {
+    id: WorkstationTab;
+    label: string;
+    icon: typeof ArrowDownUp;
+  }[] = [
     { id: "swap", label: "Swap", icon: ArrowDownUp },
     { id: "liquidity", label: "Liquidity", icon: Droplets },
     { id: "position", label: "My Position", icon: Wallet },
@@ -419,7 +423,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-12">
       <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8">
-
         {/* HEADER */}
         <header className="flex flex-wrap justify-between items-center gap-4 border-b border-slate-800 pb-6">
           <div>
@@ -533,7 +536,9 @@ export default function App() {
                   }}
                   labelStyle={{ color: "#94a3b8", fontSize: "12px" }}
                   formatter={(value) => [
-                    value === undefined || value === null || Array.isArray(value)
+                    value === undefined ||
+                    value === null ||
+                    Array.isArray(value)
                       ? ""
                       : Number(value).toFixed(4),
                     "Price",
@@ -553,7 +558,7 @@ export default function App() {
         </section>
 
         {/* WORKSTATION TABS */}
-        <div className="flex gap-1 sm:gap-2 border-b border-slate-800 overflow-x-auto">
+        <div className="flex gap-1 overflow-y-hidden sm:gap-2 border-b border-slate-800 overflow-x-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -687,7 +692,9 @@ export default function App() {
                 {estimate && amountIsValid && (
                   <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-2 text-sm">
                     <div className="flex justify-between gap-2">
-                      <span className="text-slate-400 shrink-0">Estimated received</span>
+                      <span className="text-slate-400 shrink-0">
+                        Estimated received
+                      </span>
                       <span className="font-semibold text-white text-right">
                         ≈ {formatNumber(estimate.estimatedOut, 4)} Token{" "}
                         {tokenIn === "A" ? "B" : "A"}
@@ -706,8 +713,8 @@ export default function App() {
                       <div className="flex items-start gap-1.5 text-amber-400 text-xs pt-1">
                         <AlertTriangle size={14} className="shrink-0 mt-0.5" />
                         <span>
-                          This trade is large relative to pool reserves —
-                          expect significant price impact.
+                          This trade is large relative to pool reserves — expect
+                          significant price impact.
                         </span>
                       </div>
                     )}
@@ -836,21 +843,25 @@ export default function App() {
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-1.5">
-                      Pools need both tokens at the current ratio — the
-                      matching Token B amount is calculated automatically.
+                      Pools need both tokens at the current ratio — the matching
+                      Token B amount is calculated automatically.
                     </p>
                   </div>
 
                   {depositPreview && (
                     <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-2 text-sm">
                       <div className="flex justify-between gap-2">
-                        <span className="text-slate-400 shrink-0">Required Token B</span>
+                        <span className="text-slate-400 shrink-0">
+                          Required Token B
+                        </span>
                         <span className="font-semibold text-white text-right">
                           {formatNumber(depositPreview.requiredB, 4)} Token B
                         </span>
                       </div>
                       <div className="flex justify-between gap-2">
-                        <span className="text-slate-400 shrink-0">LP shares minted</span>
+                        <span className="text-slate-400 shrink-0">
+                          LP shares minted
+                        </span>
                         <span className="font-medium text-slate-300 text-right">
                           ≈ {formatNumber(depositPreview.sharesMinted, 4)}
                         </span>
@@ -891,8 +902,8 @@ export default function App() {
                     </div>
                     {!hasPosition ? (
                       <p className="text-xs text-slate-500 mt-1.5">
-                        You don't have a liquidity position yet — add
-                        liquidity first.
+                        You don't have a liquidity position yet — add liquidity
+                        first.
                       </p>
                     ) : (
                       <p className="text-xs text-slate-500 mt-1.5">
@@ -911,7 +922,9 @@ export default function App() {
                   {removePreview && (
                     <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-2 text-sm">
                       <div className="flex justify-between gap-2">
-                        <span className="text-slate-400 shrink-0">You'll receive</span>
+                        <span className="text-slate-400 shrink-0">
+                          You'll receive
+                        </span>
                         <span className="font-semibold text-white text-right">
                           {formatNumber(removePreview.returnedA, 4)} A +{" "}
                           {formatNumber(removePreview.returnedB, 4)} B
@@ -1023,8 +1036,8 @@ export default function App() {
 
             {!positionLoading && !hasPosition && (
               <div className="text-center py-12 text-slate-600 text-sm border border-dashed border-slate-800 rounded-2xl">
-                You haven't added liquidity yet. Switch to the Liquidity tab
-                to become a pool provider and start tracking your position.
+                You haven't added liquidity yet. Switch to the Liquidity tab to
+                become a pool provider and start tracking your position.
               </div>
             )}
 
@@ -1088,20 +1101,26 @@ export default function App() {
                   </h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between gap-2 flex-wrap">
-                      <span className="text-slate-400">Deposited originally</span>
+                      <span className="text-slate-400">
+                        Deposited originally
+                      </span>
                       <span className="text-slate-300 text-right">
                         {formatNumber(position.deposited_amount_a, 4)} A +{" "}
                         {formatNumber(position.deposited_amount_b, 4)} B
                       </span>
                     </div>
                     <div className="flex justify-between gap-2 flex-wrap">
-                      <span className="text-slate-400">Worth today if held (not pooled)</span>
+                      <span className="text-slate-400">
+                        Worth today if held (not pooled)
+                      </span>
                       <span className="text-slate-300 text-right">
                         {formatNumber(position.hold_value_in_b, 2)} (in B)
                       </span>
                     </div>
                     <div className="flex justify-between gap-2 flex-wrap border-t border-slate-800 pt-2">
-                      <span className="text-slate-400">Worth today, pooled</span>
+                      <span className="text-slate-400">
+                        Worth today, pooled
+                      </span>
                       <span className="text-slate-300 text-right">
                         {formatNumber(position.current_value_in_b, 2)} (in B)
                       </span>
@@ -1109,11 +1128,11 @@ export default function App() {
                   </div>
                   <p className="text-xs text-slate-500 mt-3 leading-relaxed">
                     Impermanent loss compares pooling against simply holding
-                    your original tokens — it isn't your total profit or
-                    loss. Trading fees you've earned as a liquidity provider
-                    are baked into the pool's reserves and aren't broken out
-                    separately here, so a negative IL doesn't necessarily
-                    mean you're worse off overall once fees are counted.
+                    your original tokens — it isn't your total profit or loss.
+                    Trading fees you've earned as a liquidity provider are baked
+                    into the pool's reserves and aren't broken out separately
+                    here, so a negative IL doesn't necessarily mean you're worse
+                    off overall once fees are counted.
                   </p>
                 </div>
               </div>

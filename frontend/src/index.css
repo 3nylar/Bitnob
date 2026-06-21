@@ -1,8 +1,18 @@
-@import "tailwindcss"; 
+@import "tailwindcss";
 
 @layer utilities {
   input[type="number"]::-webkit-inner-spin-button,
-  input[type="number"]::-webkit-outer-spin-button {
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-clear-button {
     -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    margin: 0;
+    display: none; 
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
   }
 }
