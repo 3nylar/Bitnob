@@ -432,9 +432,6 @@ export default function App() {
             
             {/* Logo & Platform Name */}
             <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-linear-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                <RefreshCw size={18} className="text-white animate-spin-slow" />
-              </div>
               <div>
                 <h1 className="text-md font-bold tracking-tight text-white leading-none">Practice Hub</h1>
                 <span className="text-[10px] text-slate-500 font-medium font-mono uppercase tracking-wider">AMM Simulator v1.0.0</span>
@@ -453,7 +450,7 @@ export default function App() {
               <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl px-3 py-1.5 text-xs font-mono flex items-center gap-2 max-w-35 sm:max-w-none">
                 <User size={13} className="text-blue-400 shrink-0" />
                 <span className="text-slate-300 truncate">
-                  {userId ? `ID: ${userId.substring(0, 8)}...` : "Connecting..."}
+                  {userId ? `ID: ${userId.substring(0, 8)}` : "Connecting..."}
                 </span>
               </div>
             </div>
@@ -1221,25 +1218,21 @@ export default function App() {
         </section>
 
         {/* 3. APPLICATION FOOTER */}
-      <footer className="w-full bg-slate-900 border-t border-slate-800/80 mt-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
-          
-          {/* Brand Copyright / Concept Ownership */}
-          <div className="text-slate-500 text-center sm:text-left">
-            <p className="font-semibold text-slate-400">restoringthe lifestyle</p>
-            <p className="mt-0.5">Designed as a collaborative sandbox playground for friends.</p>
-          </div>
+        <footer className="w-full border-t border-slate-800/50 mt-16 px-4 py-8 text-xs text-slate-500">
+          <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-start justify-between gap-6">
 
-          {/* Inline Operational Indicators */}
-          <div className="flex items-center flex-wrap justify-center gap-x-6 gap-y-2 text-slate-400 font-medium">
-            <span className="flex items-center gap-1"><Code size={13} className="text-slate-500" /> React + TypeScript</span>
-            <span className="flex items-center gap-1"><Cpu size={13} className="text-slate-500" /> Constant Product Invariant</span>
-            <span className="text-slate-600">|</span>
-            <span className="text-slate-500 font-mono text-[11px]">C:\Dev\Endz</span>
-          </div>
+            <div className="max-w-xs">
+              <p className="text-slate-300 font-semibold text-sm mb-1">BitPool</p>
+              <p className="leading-relaxed">
+                A constant product AMM simulator. Swap tokens, provide liquidity, and watch impermanent loss play out in real time — built with React, TypeScript & Python.
+              </p>
+            </div>
 
-        </div>
-      </footer>
+            <p className="text-slate-600 sm:self-end">© Lara 2026. All rights reserved.</p>
+
+          </div>
+        </footer>
+      
       </div>
     </div>
   );
