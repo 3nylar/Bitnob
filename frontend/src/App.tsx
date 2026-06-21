@@ -1009,6 +1009,8 @@ export default function App() {
                     Deposit or withdraw to see a ledger entry here.
                   </div>
                 )}
+
+
               </div>
             </div>
           </section>
@@ -1139,6 +1141,48 @@ export default function App() {
             )}
           </section>
         )}
+
+        {/* EXPLANATORY DOCUMENT BLOCK (BUILT-IN APP GUIDE) */}
+        <section className="bg-linear-to-b from-slate-900 to-slate-950 border border-slate-800/80 rounded-3xl p-5 sm:p-6 shadow-2xl mt-12">
+          <div className="border-b border-slate-800 pb-4 mb-4">
+            <h3 className="text-md font-bold tracking-wide text-blue-400 uppercase flex items-center gap-2">
+              💡 Simulator Core Mechanics Explainer
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">How this Automated Market Maker calculates values dynamically in real-time</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+            <div className="space-y-2">
+              <h4 className="font-semibold text-white flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400">
+                1. The Constant Product Invariant
+              </h4>
+              <p className="text-slate-400 leading-relaxed text-xs">
+                This pool uses Vitalik Buterin's classic equation: <code className="text-blue-400 bg-slate-950 px-1 py-0.5 rounded font-mono">x * y = k</code>. 
+                The total liquidity constant multiplier (<code className="text-slate-300 font-mono">k</code>) must remain fixed during trades. When you buy Token A, its reserve decreases, causing its price to go up automatically to satisfy the system formula.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="font-semibold text-white flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400">
+                2. Symmetrical LP Provision
+              </h4>
+              <p className="text-slate-400 leading-relaxed text-xs">
+                When adding liquidity, assets must match the exact pre-existing ratio of the pool (<code className="text-slate-300 font-mono">reserve_b / reserve_a</code>). 
+                This ensures your deposit changes the size of the pool without creating structural price spikes or arbitrage extraction paths for trading bots.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="font-semibold text-white flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400">
+                3. Impermanent Loss Risk
+              </h4>
+              <p className="text-slate-400 leading-relaxed text-xs">
+                If the price of assets diverges heavily from the ratio when you deposited them, your portfolio balance changes as traders swap against the pool. 
+                Your total value inside the pool might become lower than if you had simply held the individual tokens inside a cold-storage wallet.
+              </p>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );
