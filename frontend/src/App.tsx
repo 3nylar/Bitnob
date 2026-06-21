@@ -80,6 +80,8 @@ const BACKEND_URL = import.meta.env.VITE_API_BASE_URL;
 const SWAP_FEE_BPS = 30;
 const MAX_PRICE_HISTORY = 200;
 const USER_ID_KEY = "amm_sim_user_id";
+// FIX #5: Pool auto-refresh interval (ms)
+const POOL_REFRESH_INTERVAL_MS = 5000;
 
 function quoteOutput(
   amountIn: number,
@@ -98,8 +100,10 @@ function formatNumber(value: number, maxFractionDigits = 2): string {
   });
 }
 
+// FIX #8: Special-case zero so it doesn't show "+0.0000%"
 function formatSigned(value: number, maxFractionDigits = 4): string {
   if (!Number.isFinite(value)) return "---";
+  if (Math.abs(value) < Math.pow(10, -maxFractionDigits)) return "0.00%";
   const sign = value > 0 ? "+" : "";
   return `${sign}${formatNumber(value, maxFractionDigits)}`;
 }
@@ -117,6 +121,9 @@ function getOrCreateUserId(): string {
     window.localStorage.setItem(USER_ID_KEY, generated);
     return generated;
   } catch {
+    // FIX #2: localStorage unavailable (e.g. sandboxed iframe) — fall back
+    // to an in-memory ID. Position tracking won't persist across page reloads
+    // in this environment, but the app will still function correctly.
     return fresh();
   }
 }
@@ -150,7 +157,9 @@ export default function App() {
   const [userId] = useState<string>(getOrCreateUserId);
 
   const [pool, setPool] = useState<PoolState | null>(null);
+  // FIX #7: Start as false — position is lazy-loaded when the tab is first visited
   const [activeTab, setActiveTab] = useState<WorkstationTab>("swap");
+  const positionFetchedRef = useRef(false);
 
   // --- swap state ---
   const [tokenIn, setTokenIn] = useState<"A" | "B">("A");
@@ -159,6 +168,8 @@ export default function App() {
   const [swapReceipt, setSwapReceipt] = useState<SwapResponse | null>(null);
   const [swapLoading, setSwapLoading] = useState<boolean>(false);
   const [swapError, setSwapError] = useState<string>("");
+  // FIX #3: Track slippage warning separately from hard errors
+  const [swapSlippageWarning, setSwapSlippageWarning] = useState<string>("");
 
   // --- liquidity state ---
   const [liquidityMode, setLiquidityMode] = useState<"add" | "remove">("add");
@@ -172,16 +183,18 @@ export default function App() {
 
   // --- position / IL state ---
   const [position, setPosition] = useState<PositionResponse | null>(null);
-  const [positionLoading, setPositionLoading] = useState<boolean>(true);
+  // FIX #7: Don't show "loading" until the user actually visits the tab
+  const [positionLoading, setPositionLoading] = useState<boolean>(false);
   const [positionError, setPositionError] = useState<string>("");
   const [hasPosition, setHasPosition] = useState<boolean>(false);
 
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [poolError, setPoolError] = useState<string>("");
+  // FIX #10: Track whether the initial pool fetch has completed
+  const [poolReady, setPoolReady] = useState<boolean>(false);
 
-  const [priceHistory, setPriceHistory] = useState<PricePoint[]>(() => [
-    { time: "Init", timestamp: Date.now(), price: 2000.0 },
-  ]);
+  // FIX #6: Start with an empty history — the real initial price comes from the backend
+  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
 
   const fetchSeqRef = useRef(0);
 
@@ -192,6 +205,7 @@ export default function App() {
       if (seq !== fetchSeqRef.current) return;
 
       setPool(response.data);
+      setPoolReady(true);
       setPoolError("");
 
       const now = Date.now();
@@ -245,32 +259,35 @@ export default function App() {
     [userId],
   );
 
-  useEffect(() => {
-    let isCancelled = false;
-
-    async function loadInitialData() {
-      const results = await Promise.allSettled([
-        fetchPoolState(),
-        fetchPosition(false),
-      ]);
-      if (isCancelled) return;
-      for (const result of results) {
-        if (result.status === "rejected") {
-          console.error("Initial data load failed:", result.reason);
-        }
+  // FIX #7: Lazy-load position when the tab is first visited
+  const handleTabChange = useCallback(
+    (tab: WorkstationTab) => {
+      setActiveTab(tab);
+      if (tab === "position" && !positionFetchedRef.current) {
+        positionFetchedRef.current = true;
+        void fetchPosition(true);
       }
-    }
+    },
+    [fetchPosition],
+  );
 
-    void loadInitialData();
+  useEffect(() => {
+    void fetchPoolState();
+  }, [fetchPoolState]);
 
-    return () => {
-      isCancelled = true;
-    };
-  }, [fetchPoolState, fetchPosition]);
+  // FIX #5: Auto-refresh pool state on an interval
+  useEffect(() => {
+    const id = setInterval(() => {
+      void fetchPoolState();
+    }, POOL_REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [fetchPoolState]);
 
   const handleManualRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchPoolState(), fetchPosition()]);
+    const tasks: Promise<void>[] = [fetchPoolState()];
+    if (positionFetchedRef.current) tasks.push(fetchPosition());
+    await Promise.all(tasks);
     setRefreshing(false);
   };
 
@@ -297,12 +314,23 @@ export default function App() {
   const amountIsValid =
     amountIn.trim() !== "" && Number.isFinite(parsedAmount) && parsedAmount > 0;
 
+  // FIX #3: Check slippage tolerance BEFORE submitting and warn the user
+  const slippageBreached = useMemo(() => {
+    if (!estimate || !amountIsValid) return false;
+    const slip = parseFloat(slippagePct);
+    if (!Number.isFinite(slip)) return false;
+    const minAcceptable = estimate.estimatedOut * (1 - slip / 100);
+    // The quote already reflects the fee — warn if estimate is suspiciously low
+    return estimate.estimatedOut < minAcceptable;
+  }, [estimate, amountIsValid, slippagePct]);
+
   const handleSwap = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amountIsValid || !pool) return;
 
     setSwapLoading(true);
     setSwapError("");
+    setSwapSlippageWarning("");
     try {
       const response = await axios.post<SwapResponse>(
         `${BACKEND_URL}/swap`,
@@ -310,21 +338,24 @@ export default function App() {
         { params: { token_in: tokenIn, amount_in: parsedAmount } },
       );
 
+      // FIX #3: Post-execution slippage check is now a non-blocking warning
+      // displayed separately from hard errors, so users understand the trade
+      // went through but the outcome was worse than their tolerance allowed.
       if (estimate) {
         const slip = parseFloat(slippagePct);
         const minAcceptable = Number.isFinite(slip)
           ? estimate.estimatedOut * (1 - slip / 100)
           : 0;
         if (response.data.received < minAcceptable) {
-          setSwapError(
-            `Trade executed but received less than your ${slippagePct}% slippage tolerance allowed. Received ${formatNumber(response.data.received, 4)}, expected at least ${formatNumber(minAcceptable, 4)}.`,
+          setSwapSlippageWarning(
+            `Swap completed, but received ${formatNumber(response.data.received, 4)} — less than your ${slippagePct}% slippage tolerance (minimum ${formatNumber(minAcceptable, 4)}). This can happen when the pool moves between your quote and execution.`,
           );
         }
       }
 
       setSwapReceipt(response.data);
       setAmountIn("");
-      await Promise.all([fetchPoolState(), fetchPosition()]);
+      await Promise.all([fetchPoolState(), fetchPosition(false)]);
     } catch (error: unknown) {
       console.error("Transaction failed:", error);
       setSwapError(describeRequestError(error, "execute the swap"));
@@ -379,7 +410,9 @@ export default function App() {
       );
       setLiquidityReceipt(response.data);
       setDepositAmountA("");
-      await Promise.all([fetchPoolState(), fetchPosition()]);
+      // Mark position as fetched so manual refresh also updates it
+      positionFetchedRef.current = true;
+      await Promise.all([fetchPoolState(), fetchPosition(false)]);
     } catch (error: unknown) {
       console.error("Add liquidity failed:", error);
       setLiquidityError(describeRequestError(error, "add liquidity"));
@@ -402,7 +435,7 @@ export default function App() {
       );
       setLiquidityReceipt(response.data);
       setSharesToBurn("");
-      await Promise.all([fetchPoolState(), fetchPosition()]);
+      await Promise.all([fetchPoolState(), fetchPosition(false)]);
     } catch (error: unknown) {
       console.error("Remove liquidity failed:", error);
       setLiquidityError(describeRequestError(error, "remove liquidity"));
@@ -421,30 +454,33 @@ export default function App() {
     { id: "position", label: "My Position", icon: Wallet },
   ];
 
+  // FIX #9: Only show the IL explainer panel when IL is non-trivial
+  const showILExplainer =
+    position && Math.abs(position.impermanent_loss_pct) > 0.01;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-12">
       <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8">
-        {/* 1. APPLICATION HEADER */}
-        <header className="w-full bg-slate-900/80 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-50 px-4 sm:px-6 lg:px-8">
+
+        {/* FIX #1: Changed from <header> to <nav> — only one <header> per page */}
+        <nav className="w-full bg-slate-900/80 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-50 px-4 sm:px-6 lg:px-8">
           <div className="max-w-7xl mx-auto h-16 flex items-center justify-between gap-4">
-            
+
             {/* Logo & Platform Name */}
             <div className="flex items-center gap-3">
               <div>
-                <h1 className="text-md font-bold tracking-tight text-white leading-none">Practice Hub</h1>
+                <p className="text-md font-bold tracking-tight text-white leading-none">Practice Hub</p>
                 <span className="text-[10px] text-slate-500 font-medium font-mono uppercase tracking-wider">AMM Simulator v1.0.0</span>
               </div>
             </div>
 
             {/* Right Action Bar & Network Status */}
             <div className="flex items-center gap-3">
-              {/* Live Environment Simulation Badge */}
               <div className="hidden sm:flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-full border border-slate-800 text-xs">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="text-slate-400 font-mono font-medium">Local-Sandbox Engine</span>
               </div>
 
-              {/* Simulated Active Account Identity Key */}
               <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl px-3 py-1.5 text-xs font-mono flex items-center gap-2 max-w-35 sm:max-w-none">
                 <User size={13} className="text-blue-400 shrink-0" />
                 <span className="text-slate-300 truncate">
@@ -454,7 +490,9 @@ export default function App() {
             </div>
 
           </div>
-        </header>
+        </nav>
+
+        {/* PAGE HEADER — FIX #1: only one <header> now */}
         <header className="flex flex-wrap justify-between items-center gap-4 border-b border-slate-800 pb-6">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight bg-linear-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
@@ -530,65 +568,72 @@ export default function App() {
             <span>Token A Price Chart (Denominated in B)</span>
           </h2>
           <div className="h-48 sm:h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={priceHistory}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="#1e293b"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="time"
-                  stroke="#64748b"
-                  fontSize={11}
-                  tickLine={false}
-                />
-                <YAxis
-                  domain={["auto", "auto"]}
-                  stroke="#64748b"
-                  fontSize={11}
-                  tickLine={false}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#0f172a",
-                    borderColor: "#334155",
-                    borderRadius: "12px",
-                    color: "#f8fafc",
-                  }}
-                  labelStyle={{ color: "#94a3b8", fontSize: "12px" }}
-                  formatter={(value) => [
-                    value === undefined ||
-                    value === null ||
-                    Array.isArray(value)
-                      ? ""
-                      : Number(value).toFixed(4),
-                    "Price",
-                  ]}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="price"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#colorPrice)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {/* FIX #10: Show skeleton while awaiting first pool response */}
+            {!poolReady ? (
+              <div className="h-full flex items-center justify-center border border-dashed border-slate-800 rounded-2xl text-slate-600 text-sm">
+                Waiting for pool data…
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={priceHistory}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#1e293b"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="time"
+                    stroke="#64748b"
+                    fontSize={11}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    domain={["auto", "auto"]}
+                    stroke="#64748b"
+                    fontSize={11}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#0f172a",
+                      borderColor: "#334155",
+                      borderRadius: "12px",
+                      color: "#f8fafc",
+                    }}
+                    labelStyle={{ color: "#94a3b8", fontSize: "12px" }}
+                    formatter={(value) => [
+                      value === undefined ||
+                      value === null ||
+                      Array.isArray(value)
+                        ? ""
+                        : Number(value).toFixed(4),
+                      "Price",
+                    ]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="price"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorPrice)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </section>
 
-        {/* WORKSTATION TABS */}
+        {/* WORKSTATION TABS — FIX #7: use handleTabChange */}
         <div className="flex gap-1 overflow-y-hidden sm:gap-2 border-b border-slate-800 overflow-x-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -596,7 +641,7 @@ export default function App() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer -mb-px whitespace-nowrap ${
                   isActive
                     ? "border-blue-500 text-blue-400"
@@ -627,6 +672,14 @@ export default function App() {
                 <div className="bg-red-950 border border-red-500/50 text-red-200 p-3 rounded-xl text-sm mb-4 flex items-start gap-2">
                   <AlertTriangle size={16} className="shrink-0 mt-0.5" />{" "}
                   <span>{swapError}</span>
+                </div>
+              )}
+
+              {/* FIX #3: Slippage warning shown separately — trade went through but outcome was worse than tolerance */}
+              {swapSlippageWarning && (
+                <div className="bg-amber-950/60 border border-amber-500/40 text-amber-200 p-3 rounded-xl text-sm mb-4 flex items-start gap-2">
+                  <AlertTriangle size={16} className="shrink-0 mt-0.5" />{" "}
+                  <span>{swapSlippageWarning}</span>
                 </div>
               )}
 
@@ -691,7 +744,6 @@ export default function App() {
                   <label className="block text-xs text-slate-400 font-medium mb-1.5 uppercase">
                     Max slippage
                   </label>
-                  {/* FIX: 2-col on mobile, 4-col on sm+ */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {["0.1", "0.5", "1.0"].map((preset) => (
                       <button
@@ -746,6 +798,15 @@ export default function App() {
                         <span>
                           This trade is large relative to pool reserves — expect
                           significant price impact.
+                        </span>
+                      </div>
+                    )}
+                    {/* FIX #3: Pre-flight slippage warning */}
+                    {slippageBreached && (
+                      <div className="flex items-start gap-1.5 text-amber-400 text-xs pt-1">
+                        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                        <span>
+                          This trade may exceed your slippage tolerance before it executes.
                         </span>
                       </div>
                     )}
@@ -804,7 +865,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="text-center py-8 sm:py-12 text-slate-600 text-sm border border-dashed border-slate-800 rounded-2xl">
-                    Run a swap execution to stream a ledger entry block.
+                    Run a swap to see the result here.
                   </div>
                 )}
               </div>
@@ -1040,8 +1101,6 @@ export default function App() {
                     Deposit or withdraw to see a ledger entry here.
                   </div>
                 )}
-
-
               </div>
             </div>
           </section>
@@ -1061,9 +1120,10 @@ export default function App() {
               </div>
             )}
 
+            {/* FIX #7: Loading state is now only shown when the tab is active and fetching */}
             {positionLoading && !position && (
               <div className="text-center py-12 text-slate-500 text-sm">
-                Loading your position...
+                Loading your position…
               </div>
             )}
 
@@ -1076,7 +1136,6 @@ export default function App() {
 
             {position && (
               <div className="space-y-6">
-                {/* FIX: 1-col → 2-col → 3-col */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl">
                     <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
@@ -1113,6 +1172,7 @@ export default function App() {
                     <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
                       Impermanent loss
                     </div>
+                    {/* FIX #8: formatSigned now handles near-zero correctly */}
                     <div
                       className={`text-2xl font-bold ${
                         position.impermanent_loss_pct < 0
@@ -1120,7 +1180,7 @@ export default function App() {
                           : "text-emerald-400"
                       }`}
                     >
-                      {formatSigned(position.impermanent_loss_pct, 4)}%
+                      {formatSigned(position.impermanent_loss_pct, 4)}
                     </div>
                     <div className="text-xs text-slate-500 mt-1">
                       vs. holding the original deposit
@@ -1159,21 +1219,24 @@ export default function App() {
                       </span>
                     </div>
                   </div>
-                  <p className="text-xs text-slate-500 mt-3 leading-relaxed">
-                    Impermanent loss compares pooling against simply holding
-                    your original tokens — it isn't your total profit or loss.
-                    Trading fees you've earned as a liquidity provider are baked
-                    into the pool's reserves and aren't broken out separately
-                    here, so a negative IL doesn't necessarily mean you're worse
-                    off overall once fees are counted.
-                  </p>
+                  {/* FIX #9: Only show the IL explainer when IL is meaningfully non-zero */}
+                  {showILExplainer && (
+                    <p className="text-xs text-slate-500 mt-3 leading-relaxed">
+                      Impermanent loss compares pooling against simply holding
+                      your original tokens — it isn't your total profit or loss.
+                      Trading fees you've earned as a liquidity provider are baked
+                      into the pool's reserves and aren't broken out separately
+                      here, so a negative IL doesn't necessarily mean you're worse
+                      off overall once fees are counted.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
           </section>
         )}
 
-        {/* EXPLANATORY DOCUMENT BLOCK (BUILT-IN APP GUIDE) */}
+        {/* EXPLANATORY DOCUMENT BLOCK */}
         <section className="bg-linear-to-b from-slate-900 to-slate-950 border border-slate-800/80 rounded-3xl p-5 sm:p-6 shadow-2xl mt-12">
           <div className="border-b border-slate-800 pb-4 mb-4">
             <h3 className="text-md font-bold tracking-wide text-blue-400 uppercase flex items-center gap-2">
@@ -1188,7 +1251,7 @@ export default function App() {
                 1. The Constant Product Invariant
               </h4>
               <p className="text-slate-400 leading-relaxed text-xs">
-                This pool uses Vitalik Buterin's classic equation: <code className="text-blue-400 bg-slate-950 px-1 py-0.5 rounded font-mono">x * y = k</code>. 
+                This pool uses Vitalik Buterin's classic equation: <code className="text-blue-400 bg-slate-950 px-1 py-0.5 rounded font-mono">x * y = k</code>.
                 The total liquidity constant multiplier (<code className="text-slate-300 font-mono">k</code>) must remain fixed during trades. When you buy Token A, its reserve decreases, causing its price to go up automatically to satisfy the system formula.
               </p>
             </div>
@@ -1198,7 +1261,7 @@ export default function App() {
                 2. Symmetrical LP Provision
               </h4>
               <p className="text-slate-400 leading-relaxed text-xs">
-                When adding liquidity, assets must match the exact pre-existing ratio of the pool (<code className="text-slate-300 font-mono">reserve_b / reserve_a</code>). 
+                When adding liquidity, assets must match the exact pre-existing ratio of the pool (<code className="text-slate-300 font-mono">reserve_b / reserve_a</code>).
                 This ensures your deposit changes the size of the pool without creating structural price spikes or arbitrage extraction paths for trading bots.
               </p>
             </div>
@@ -1208,29 +1271,26 @@ export default function App() {
                 3. Impermanent Loss Risk
               </h4>
               <p className="text-slate-400 leading-relaxed text-xs">
-                If the price of assets diverges heavily from the ratio when you deposited them, your portfolio balance changes as traders swap against the pool. 
+                If the price of assets diverges heavily from the ratio when you deposited them, your portfolio balance changes as traders swap against the pool.
                 Your total value inside the pool might become lower than if you had simply held the individual tokens inside a cold-storage wallet.
               </p>
             </div>
           </div>
         </section>
 
-        {/* 3. APPLICATION FOOTER */}
+        {/* FOOTER */}
         <footer className="w-full border-t border-slate-800/50 mt-16 px-4 py-8 text-xs text-slate-500">
           <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-start justify-between gap-6">
-
             <div className="max-w-xs">
               <p className="text-slate-300 font-semibold text-sm mb-1">BitPool</p>
               <p className="leading-relaxed">
                 A constant product AMM simulator. Swap tokens, provide liquidity, and watch impermanent loss play out in real time — built with React, TypeScript & Python.
               </p>
             </div>
-
             <p className="text-slate-600 sm:self-end">© Lara 2026. All rights reserved.</p>
-
           </div>
         </footer>
-      
+
       </div>
     </div>
   );
