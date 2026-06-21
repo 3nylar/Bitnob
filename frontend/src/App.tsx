@@ -13,8 +13,6 @@ import {
   Plus,
   Minus,
   User,
-  Code,
-  Cpu,
 } from "lucide-react";
 import {
   ResponsiveContainer,
