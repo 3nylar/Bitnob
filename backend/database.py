@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
 from datetime import datetime, timezone
+import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./simulator.db")
 
