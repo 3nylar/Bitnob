@@ -12,6 +12,9 @@ import {
   Wallet,
   Plus,
   Minus,
+  User,
+  Code,
+  Cpu,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -423,7 +426,40 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-12">
       <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8">
-        {/* HEADER */}
+        {/* 1. APPLICATION HEADER */}
+        <header className="w-full bg-slate-900/80 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-50 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto h-16 flex items-center justify-between gap-4">
+            
+            {/* Logo & Platform Name */}
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-linear-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <RefreshCw size={18} className="text-white animate-spin-slow" />
+              </div>
+              <div>
+                <h1 className="text-md font-bold tracking-tight text-white leading-none">Practice Hub</h1>
+                <span className="text-[10px] text-slate-500 font-medium font-mono uppercase tracking-wider">AMM Simulator v1.0.0</span>
+              </div>
+            </div>
+
+            {/* Right Action Bar & Network Status */}
+            <div className="flex items-center gap-3">
+              {/* Live Environment Simulation Badge */}
+              <div className="hidden sm:flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-full border border-slate-800 text-xs">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-slate-400 font-mono font-medium">Local-Sandbox Engine</span>
+              </div>
+
+              {/* Simulated Active Account Identity Key */}
+              <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl px-3 py-1.5 text-xs font-mono flex items-center gap-2 max-w-35 sm:max-w-none">
+                <User size={13} className="text-blue-400 shrink-0" />
+                <span className="text-slate-300 truncate">
+                  {userId ? `ID: ${userId.substring(0, 8)}...` : "Connecting..."}
+                </span>
+              </div>
+            </div>
+
+          </div>
+        </header>
         <header className="flex flex-wrap justify-between items-center gap-4 border-b border-slate-800 pb-6">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight bg-linear-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
@@ -1163,7 +1199,7 @@ export default function App() {
             </div>
 
             <div className="space-y-2">
-              <h4 className="font-semibold text-white flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400">
+              <h4 className="font-semibold flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400">
                 2. Symmetrical LP Provision
               </h4>
               <p className="text-slate-400 leading-relaxed text-xs">
@@ -1173,7 +1209,7 @@ export default function App() {
             </div>
 
             <div className="space-y-2">
-              <h4 className="font-semibold text-white flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400">
+              <h4 className="font-semibold flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-400">
                 3. Impermanent Loss Risk
               </h4>
               <p className="text-slate-400 leading-relaxed text-xs">
@@ -1183,6 +1219,27 @@ export default function App() {
             </div>
           </div>
         </section>
+
+        {/* 3. APPLICATION FOOTER */}
+      <footer className="w-full bg-slate-900 border-t border-slate-800/80 mt-16 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+          
+          {/* Brand Copyright / Concept Ownership */}
+          <div className="text-slate-500 text-center sm:text-left">
+            <p className="font-semibold text-slate-400">restoringthe lifestyle</p>
+            <p className="mt-0.5">Designed as a collaborative sandbox playground for friends.</p>
+          </div>
+
+          {/* Inline Operational Indicators */}
+          <div className="flex items-center flex-wrap justify-center gap-x-6 gap-y-2 text-slate-400 font-medium">
+            <span className="flex items-center gap-1"><Code size={13} className="text-slate-500" /> React + TypeScript</span>
+            <span className="flex items-center gap-1"><Cpu size={13} className="text-slate-500" /> Constant Product Invariant</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-500 font-mono text-[11px]">C:\Dev\Endz</span>
+          </div>
+
+        </div>
+      </footer>
       </div>
     </div>
   );
