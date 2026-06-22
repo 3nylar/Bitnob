@@ -139,3 +139,8 @@ The FastAPI lifespan context manager will detect the missing file and generate a
 - **Integer-safe math** - all reserve arithmetic uses Python's `Decimal` type internally to avoid floating-point drift across sequential swaps.
 - **Additive-only schema** - `create_all()` never drops tables; destructive migrations are manual (delete `simulator.db`) to keep the dev loop fast.
 - **CORS open in development** - the FastAPI app allows all origins in development mode. Restrict this before any public deployment.
+
+---
+
+
+*Credit to Claude for the write-up and Fowobaje for the template*
